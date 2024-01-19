@@ -3,10 +3,8 @@
 
 #include <QQuickFramebufferObject>
 #include <QQuickItem>
-#include <memory>
 #include <QQuickOpenGLUtils>
 #include "decoder.h"
-#include "i420render.h"
 #include "decoder.h"
 #include "nv12render.h"
 #include <QTimer>
@@ -15,6 +13,7 @@
 #include <QAudioDevice>
 #include <QAudioSink>
 #include <QMediaDevices>
+#include "i420render.h"
 class VideoItem : public QQuickFramebufferObject
 {
     Q_OBJECT
@@ -58,14 +57,18 @@ public:
     int m_videoFormat;
     bool m_infoChanged = false;
     YUVData* m_yuv;
-    Decoder* m_decoder;
+    Decoder* m_decoder = NULL;
     // int m_timerId;
     // QTimer m_timer;
 private:
     void handleStateChanged(QAudio::State newState);
     QAudioSink* m_audioSink;
     void OnAudioFrameDataUpdateSig();
-    void onReadyForMoreDataSig(const char *data, qint64 len);
+    void onAudioFrameDataUpdateSig(const char *data, qint64 len);
     QIODevice* m_ioDevice;
+
+    QMetaObject::Connection m_videoDataUpdateCon;
+    QMetaObject::Connection m_videoInfoUpdateCon;
+    QMetaObject::Connection m_audioDataUpdateCon;
 };
 #endif // VIDEOITEM_H

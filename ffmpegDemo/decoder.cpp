@@ -4,6 +4,8 @@ typedef enum AVPixelFormat (*AVPixelFormatFunc)(AVCodecContext *, const enum AVP
 enum AVPixelFormat Decoder::hw_pix_fmt = AV_PIX_FMT_NONE;
 #define MAX_AUDIO_FRAME_SIZE 192000
 Decoder::Decoder()
+    : m_swr_ctx(NULL)
+    , m_sws_ctx(NULL)
 {
 }
 Decoder::~Decoder()
@@ -11,7 +13,7 @@ Decoder::~Decoder()
     qDebug()<<"before stopRecord";
     stopRecord();
     qDebug()<<"before quitThread";
-    quitThread();
+    m_thread.quit();
     qDebug()<<"after quitThread";
 }
 int Decoder::output_video_frame(AVFrame *frame)
@@ -168,7 +170,7 @@ int Decoder::output_audio_frame(AVFrame *frame)
     //qDebug("buffer size is: %d.",dst_bufsize);
     // int sleep_time=(m_outSampleRate*16*2/8)/out_size;
     // qDebug()<<"out_size"<<out_size<<"len"<<len;
-    emit audioFrameDataUpdateSig((const char*)m_audioOutBuffer,out_size);
+    emit audioDataUpdateSig((const char*)m_audioOutBuffer,out_size);
     return 0;
 }
 
@@ -513,7 +515,7 @@ void Decoder::stopRecord()
         av_freep(&yuv420p_data[0]);
     }
     //这句会崩
-    // av_freep(m_audioOutBuffer);
+    av_free(m_audioOutBuffer);
     if(m_swr_ctx)
         swr_free(&m_swr_ctx);
 

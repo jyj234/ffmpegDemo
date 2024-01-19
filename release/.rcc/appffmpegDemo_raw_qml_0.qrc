@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/ffmpegDemo/">
+    <file alias="Main.qml">D:/code/FFmpeg_Git/ffmpegDemo/Main.qml</file>
+    <file alias="ZN_MediaPlayer.qml">D:/code/FFmpeg_Git/ffmpegDemo/ZN_MediaPlayer.qml</file>
+  </qresource>
+</RCC>
+

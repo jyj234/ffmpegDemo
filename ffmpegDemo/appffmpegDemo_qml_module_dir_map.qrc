@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/ffmpegDemo">D:/code/FFmpeg_Git/ffmpegDemo</file>
+
+  </qresource>
+</RCC>

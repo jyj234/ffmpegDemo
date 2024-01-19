@@ -59,6 +59,12 @@ void ItemRender::synchronize(QQuickFramebufferObject* item)
 //************TaoItem************//
 VideoItem::VideoItem(QQuickItem* parent)
     : QQuickFramebufferObject(parent)
+    , m_ioDevice(NULL)
+    , m_audioSink(NULL)
+{
+
+}
+void VideoItem::setSource(QString url)
 {
     m_decoder = new Decoder();
     QAudioFormat format;
@@ -66,7 +72,6 @@ VideoItem::VideoItem(QQuickItem* parent)
     format.setSampleRate(16000);
     format.setChannelCount(1);
     format.setSampleFormat(QAudioFormat::Int16);
-    qDebug()<<"here1";
     QAudioDevice info(QMediaDevices::defaultAudioOutput());
     if (!info.isFormatSupported(format)) {
         qWarning() << "Raw audio format not supported by backend, cannot play audio.";
@@ -74,23 +79,17 @@ VideoItem::VideoItem(QQuickItem* parent)
     }
     m_audioSink = new QAudioSink(info,format, this);
     m_ioDevice = m_audioSink->start();
-     qDebug()<<"here2";
-}
-void VideoItem::setSource(QString url)
-{
     connect(m_decoder,&Decoder::frameInfoUpdateSig,this,&VideoItem::onVideoInfoReady);
     connect(m_decoder,&Decoder::frameDataUpdateSig,this,&VideoItem::update);
-    connect(m_decoder,&Decoder::audioFrameDataUpdateSig,this,&VideoItem::onReadyForMoreDataSig);
+    connect(m_decoder,&Decoder::audioDataUpdateSig,this,&VideoItem::onAudioFrameDataUpdateSig);
     m_decoder->moveThread(url);
     // m_audioSink->start(m_audioDevice);
     //按每秒60帧的帧率更新界面
     // m_timerId = startTimer(1000 / 25);
 }
-void VideoItem::onReadyForMoreDataSig(const char *data, qint64 len)
+void VideoItem::onAudioFrameDataUpdateSig(const char *data, qint64 len)
 {
-    qDebug()<<"before m_ioDevice->write";
     m_ioDevice->write(data,len);
-    qDebug()<<"after m_ioDevice->write";
     // if (!m_audioDevice->isOpen()) {
     //     qDebug()<<"onReadyForMoreDataSig";
     //     m_audioDevice->open(QIODevice::ReadWrite);
@@ -105,20 +104,24 @@ void VideoItem::timerEvent(QTimerEvent* event)
 }
 void VideoItem::stopDecoder()
 {
-    qDebug()<<"VideoItem::stopDecoder";
-    disconnect(m_decoder,&Decoder::frameInfoUpdateSig,this,&VideoItem::onVideoInfoReady);
-    disconnect(m_decoder,&Decoder::frameDataUpdateSig,this,&VideoItem::update);
-    disconnect(m_decoder,&Decoder::audioFrameDataUpdateSig,this,&VideoItem::onReadyForMoreDataSig);
-    m_ioDevice->waitForBytesWritten(1000);
-    qDebug()<<"before m_audioSink->stop()"<<m_ioDevice->bytesToWrite();
-    m_audioSink->stop();
-    m_ioDevice->close();
-    qDebug()<<"after m_audioSink->stop()";
-    if(m_decoder)
+    if(m_ioDevice && m_audioSink && m_decoder)
+    {
+        qDebug()<<"VideoItem::stopDecoder";
+        disconnect(m_decoder,&Decoder::frameInfoUpdateSig,this,&VideoItem::onVideoInfoReady);
+        disconnect(m_decoder,&Decoder::frameDataUpdateSig,this,&VideoItem::update);
+        disconnect(m_decoder,&Decoder::audioDataUpdateSig,this,&VideoItem::onAudioFrameDataUpdateSig);
+        qDebug()<<"before m_audioSink->stop()";
+        m_audioSink->stop();
+        qDebug()<<"before m_ioDevice->close()";
+        m_ioDevice->close();
+        qDebug()<<"before delete m_audioSink";
+        delete m_audioSink;
+        qDebug()<<"before delete m_decoder";
         delete m_decoder;
-    qDebug()<<"before m_decoder = NULL";
-    m_decoder = NULL;
-    qDebug()<<"stopDecoder over";
+        m_audioSink = NULL;
+        m_ioDevice = NULL;
+        qDebug()<<"after m_audioSink->stop()";
+    }
 }
 void VideoItem::onVideoInfoReady(int width, int height, int format)
 {

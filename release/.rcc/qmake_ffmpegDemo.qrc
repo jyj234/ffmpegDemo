@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/ffmpegDemo">
+    <file alias="qmldir">D:/code/FFmpeg_Git/release/ffmpegDemo/qmldir</file>
+  </qresource>
+</RCC>
+

@@ -1,0 +1,169 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Release-453633af51c5b3cc7c28.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					]
+				}
+			],
+			"name" : "Release",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "ffmpegDemo",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "all_qmllint::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-all_qmllint-Release-9c8c2f6c22e7dbce56f1.json",
+					"name" : "all_qmllint",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "all_qmllint_json::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-all_qmllint_json-Release-fbd5fd7e4a86db71a886.json",
+					"name" : "all_qmllint_json",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "all_qmllint_module::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-all_qmllint_module-Release-479ab47be431baabfce0.json",
+					"name" : "all_qmllint_module",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "all_qmltyperegistrations::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-all_qmltyperegistrations-Release-93fbbf3f923c714de3c1.json",
+					"name" : "all_qmltyperegistrations",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "appffmpegDemo::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-appffmpegDemo-Release-2117a7ad51ec515279f1.json",
+					"name" : "appffmpegDemo",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "appffmpegDemo_autogen::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-appffmpegDemo_autogen-Release-a7035e7c68a2d269d1c6.json",
+					"name" : "appffmpegDemo_autogen",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "appffmpegDemo_autogen_timestamp_deps::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-appffmpegDemo_autogen_timestamp_deps-Release-7d04d13c158952e8591d.json",
+					"name" : "appffmpegDemo_autogen_timestamp_deps",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "appffmpegDemo_qmlimportscan::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-appffmpegDemo_qmlimportscan-Release-0aa37c37788f16946922.json",
+					"name" : "appffmpegDemo_qmlimportscan",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "appffmpegDemo_qmllint::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-appffmpegDemo_qmllint-Release-ba56e35846cb5f0d4daa.json",
+					"name" : "appffmpegDemo_qmllint",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "appffmpegDemo_qmllint_json::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-appffmpegDemo_qmllint_json-Release-3283910d4c27a4ff8b62.json",
+					"name" : "appffmpegDemo_qmllint_json",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "appffmpegDemo_qmllint_module::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-appffmpegDemo_qmllint_module-Release-902ab32920f14f82157c.json",
+					"name" : "appffmpegDemo_qmllint_module",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "appffmpegDemo_qmltyperegistration::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-appffmpegDemo_qmltyperegistration-Release-7c8ce83d769a8c49ce00.json",
+					"name" : "appffmpegDemo_qmltyperegistration",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "appffmpegDemo_tooling::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-appffmpegDemo_tooling-Release-67d321f791ac98bcc914.json",
+					"name" : "appffmpegDemo_tooling",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "D:/code/FFmpeg_Git/release",
+		"source" : "D:/code/FFmpeg_Git/ffmpegDemo"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 6
+	}
+}

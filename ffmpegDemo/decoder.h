@@ -65,7 +65,7 @@ public:
 signals:
     void frameInfoUpdateSig(int width,int height,int format);
     void frameDataUpdateSig();
-    void audioFrameDataUpdateSig(const char *data, qint64 len);
+    void audioDataUpdateSig(const char *data, qint64 len);
 public slots:
     void startDecode();
     void moveThread(QString url);
@@ -118,8 +118,8 @@ private:
 
    YUVData* yuv;
 
-   SwsContext* m_sws_ctx;
-   SwrContext *m_swr_ctx;
+   SwsContext   *m_sws_ctx;
+   SwrContext   *m_swr_ctx;
    int yuv420p_linesize[3];
    uint8_t* yuv420p_data[3];
    uint8_t * m_audioOutBuffer = NULL;

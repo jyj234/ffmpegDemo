@@ -1,0 +1,14 @@
+-rootPath
+D:/code/FFmpeg_Git/ffmpegDemo
+-cmake-output
+-output-file
+D:/code/FFmpeg_Git/release/.qt_plugins/Qt6_QmlPlugins_Imports_appffmpegDemo.cmake
+-importPath
+D:/code/FFmpeg_Git/release/ffmpegDemo
+-importPath
+D:/code/FFmpeg_Git/release
+-importPath
+D:/Qt6.5.2/6.5.2/msvc2019_64/./qml
+-qrcFiles
+D:/code/FFmpeg_Git/release/.rcc/qmake_ffmpegDemo.qrc
+D:/code/FFmpeg_Git/release/.rcc/appffmpegDemo_raw_qml_0.qrc
