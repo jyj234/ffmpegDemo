@@ -1,2 +1,0 @@
-D:/code/FFmpeg_Git/release/appffmpegDemo_autogen/include/../EWIEGA46WW/moc_decoder.cpp.json
-D:/code/FFmpeg_Git/release/appffmpegDemo_autogen/include/../EWIEGA46WW/moc_videoitem.cpp.json

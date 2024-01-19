@@ -1,6 +1,0 @@
-module ffmpegDemo
-typeinfo appffmpegDemo.qmltypes
-prefer :/ffmpegDemo/
-Main 1.0 Main.qml
-ZN_MediaPlayer 1.0 ZN_MediaPlayer.qml
-

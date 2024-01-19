@@ -4,10 +4,13 @@ project(ffmpegDemo VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(FFMPEG_LIB_DIR "D:/ffmpegLib/lib")
+set(DH_LIB_DIR "D:/code/MES/tools/ConfigTools/lib/dh")
 set(FFMPEG_INCLUDE_DIR "D:/ffmpegLib/include")
-file(GLOB FFMPEG_H ${FFMPEG_INCLUDE_DIR}/*.h)
+set(DH_INCLUDE_DIR "D:/code/MES/tools/ConfigTools/include/dh")
+file(GLOB DH_LIBS ${DH_LIB_DIR}/*.lib)
 file(GLOB FFMPEG_LIBS ${FFMPEG_LIB_DIR}/*.lib)
 include_directories(${FFMPEG_INCLUDE_DIR})
+include_directories(${DH_INCLUDE_DIR})
 find_package(Qt6 6.4 REQUIRED COMPONENTS Quick)
 find_package(Qt6 REQUIRED COMPONENTS Multimedia)
 find_package(Qt6 REQUIRED COMPONENTS OpenGL)
@@ -45,6 +48,7 @@ target_link_libraries(appffmpegDemo
     PRIVATE Qt6::Quick
     PRIVATE ${OPENCV_LIBS}
     PRIVATE ${FFMPEG_LIBS}
+    PRIVATE ${DH_LIBS}
     PRIVATE Qt6::Multimedia
     PRIVATE Qt6::OpenGL
 )
