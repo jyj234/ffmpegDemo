@@ -2,12 +2,17 @@
 #define HW_DECODE
 typedef enum AVPixelFormat (*AVPixelFormatFunc)(AVCodecContext *, const enum AVPixelFormat *);
 enum AVPixelFormat Decoder::hw_pix_fmt = AV_PIX_FMT_NONE;
+#define MAX_AUDIO_FRAME_SIZE 192000
 Decoder::Decoder()
 {
 }
 Decoder::~Decoder()
 {
-
+    qDebug()<<"before stopRecord";
+    stopRecord();
+    qDebug()<<"before quitThread";
+    quitThread();
+    qDebug()<<"after quitThread";
 }
 int Decoder::output_video_frame(AVFrame *frame)
 {
@@ -36,46 +41,104 @@ int Decoder::output_video_frame(AVFrame *frame)
             return -1;
         }
         tmp_frame = sw_frame;
-//        qDebug()<<"hw frame";
+        sws_scale(m_sws_ctx,
+                  (const uint8_t* const*) &tmp_frame->data,  // 源数据
+                  (int*) &tmp_frame->linesize,  // 源数据的行大小
+                  0,              // 从源数据的第几行开始转换
+                  height,   // 要转换的行数
+                  yuv420p_data,   // 目标数据
+                  yuv420p_linesize); // 目标数据的行大小
+        // qDebug()<<yuv420p_linesize[0]<<yuv420p_linesize[1]<<tmp_frame->linesize[0]<<tmp_frame->linesize[1];
     } else
+    {
         tmp_frame = frame;
-
+        yuv420p_data[0] = tmp_frame->data[0];
+        yuv420p_data[1] = tmp_frame->data[1];
+        yuv420p_data[2] = tmp_frame->data[2];
+        // memcpy(yuv420p_linesize,tmp_frame->linesize,3);
+    }
     /* copy decoded frame to destination buffer:
      * this is required since rawvideo expects non aligned data */
-//    av_image_copy2(video_dst_data, video_dst_linesize,
-//                   frame->data, frame->linesize,
-//                   pix_fmt, width, height);
+   // av_image_copy2(video_dst_data, video_dst_linesize,
+   //                frame->data, frame->linesize,
+   //                pix_fmt, width, height);
 //    int size = av_image_get_buffer_size((AVPixelFormat)tmp_frame->format, tmp_frame->width,
 //                                    tmp_frame->height, 1);
 //    qDebug()<<"format"<<tmp_frame->format;
-    av_image_copy_to_buffer(video_dst_data, video_dst_bufsize,
-                                  (const uint8_t * const *)tmp_frame->data,
-                            (const int *)tmp_frame->linesize, (AVPixelFormat)tmp_frame->format,
-                                  tmp_frame->width, tmp_frame->height,1);
+
+    // 为输出 YUV420p 图像分配空间
+   // av_image_copy_to_buffer(video_dst_data, video_dst_bufsize,
+   //                          (const uint8_t * const *)tmp_frame->data,
+   //                          (const int *)tmp_frame->linesize, AV_PIX_FMT_NV12,
+   //                               tmp_frame->width, tmp_frame->height,1);
+   //  yuv->data = video_dst_data;
+    // int linesize[4];
+    // int ret = av_image_fill_linesizes(linesize, pix_fmt, width);
+   // qDebug()<<FFALIGN(linesize[0], 1)<<FFALIGN(linesize[1], 1);
+//#endif
     /* write to rawvideo file */
 //    fwrite(video_dst_data[0], 1, video_dst_bufsize, video_dst_file);
-    enum QVideoFrameFormat::PixelFormat pixelFormat;
-#ifdef HW_DECODE
-    pixelFormat = QVideoFrameFormat::Format_NV12;
-#else
-    pixelFormat = QVideoFrameFormat::Format_YUV420P;
-#endif
-    QVideoFrameFormat format(QSize(frame->width,frame->height),pixelFormat);
-    QVideoFrame videoFrame(format);
-    if( !videoFrame.map(QVideoFrame::WriteOnly)){
-        qWarning() << "QVideoFrame is not valid or not Writeable";
-        return 0;
-    }
-    uint8_t* p1 = videoFrame.bits(0);
-    memcpy(p1,video_dst_data,video_dst_bufsize);
-    m_videoSink->setVideoFrame(videoFrame);
-    videoFrame.unmap();
+//    enum QVideoFrameFormat::PixelFormat pixelFormat;
+//    pixelFormat = QVideoFrameFormat::Format_YUV420P;
+//#ifdef HW_DECODE
+//    pixelFormat = QVideoFrameFormat::Format_NV12;
+//#else
+//    pixelFormat = QVideoFrameFormat::Format_YUV420P;
+//#endif
+//    QVideoFrameFormat format(QSize(frame->width,frame->height),pixelFormat);
+//    QVideoFrame videoFrame(format);
+//    if( !videoFrame.map(QVideoFrame::WriteOnly)){
+//        qWarning() << "QVideoFrame is not valid or not Writeable";
+//        return 0;
+//    }
+//    uint8_t* p0 = videoFrame.bits(0);
+   yuv->Y = yuv420p_data[0];
+   yuv->U = yuv420p_data[1];
+   yuv->V = yuv420p_data[2];
+   emit frameDataUpdateSig();
+   // yuv->V = video_dst_data + width * height * 5 / 4;
+   // for(int i = 0; i < height; i++)
+   // {
+   //     memcpy(yuv->Y + width * i, yuv420p_data[0] + yuv420p_linesize[0] * i, width);
+   // }
+   // for(int i = 0; i < height / 2; i++)
+   // {
+   //     memcpy(yuv->U + width * i, yuv420p_data[1] + yuv420p_linesize[1] * i, width);
+   // }
+   // for(int i = 0; i < height / 2; i++)
+   // {
+   //     memcpy(yuv->V + width * i, yuv420p_data[2] + yuv420p_linesize[2] * i, width);
+   // }
+
+   // for(int i = 0; i < height / 2; i++){
+   //     for(int j = 0; j < width; j += 2){
+   //         yuv->U[(i * width + j) / 2] = tmp_frame->data[1][tmp_frame->linesize[1] * i + j];
+   //         yuv->V[(i * width + j) / 2] = tmp_frame->data[1][tmp_frame->linesize[1] * i + j + 1];
+   //     }
+   // }
+   // emit framinfo(width,height,AV_PIX_FMT_YUV420P);
+//    for (int i = 0; i < height; i++)
+//    {
+//        memcpy(p0 + width * i, tmp_frame->data[0] + tmp_frame->linesize[0] * i, width);
+//    }
+//    for(int i = 0;i < height / 2; ++i)
+//    {
+
+//        memcpy(p0 + width * height + width * i, tmp_frame->data[1] + tmp_frame->linesize[1] * i, width);
+//    }
+//    memcpy(p0,video_dst_data,video_dst_bufsize);
+//#endif
+
+//    videoFrame.unmap();
+//    m_videoSink->setVideoFrame(videoFrame);
+
     return 0;
 }
 
 int Decoder::output_audio_frame(AVFrame *frame)
 {
-    size_t unpadded_linesize = frame->nb_samples * av_get_bytes_per_sample((AVSampleFormat)frame->format);
+    // qDebug()<<"frame->format"<<frame->format;
+    // qDebug()<<"unpadded_linesize"<<unpadded_linesize<<"nb_samples"<<frame->nb_samples;
 //    printf("audio_frame n:%d nb_samples:%d pts:%s\n",
 //           audio_frame_count++, frame->nb_samples,
 //           av_ts2timestr(frame->pts, &audio_dec_ctx->time_base));
@@ -88,8 +151,24 @@ int Decoder::output_audio_frame(AVFrame *frame)
      * in these cases.
      * You should use libswresample or libavfilter to convert the frame
      * to packed data. */
-//    fwrite(frame->extended_data[0], 1, unpadded_linesize, audio_dst_file);
+   // fwrite(frame->extended_data[0], 1, unpadded_linesize, audio_dst_file);
+    // qDebug()<<"output_audio_frame";
+    // swr_convert(sws_ctx_ForAudio, &buf, frame_ForAudio->nb_samples, (const uint8_t**)(frame_ForAudio->data), frame_ForAudio->nb_samples);
 
+    int len = swr_convert(m_swr_ctx,
+                          &m_audioOutBuffer,
+                          MAX_AUDIO_FRAME_SIZE*2,
+                          (const uint8_t**)frame->data,
+                          frame->nb_samples);
+    int out_size = av_samples_get_buffer_size(NULL,
+                                              frame->ch_layout.nb_channels,
+                                              len,
+                                              m_outSampleFormat,
+                                              1);
+    //qDebug("buffer size is: %d.",dst_bufsize);
+    // int sleep_time=(m_outSampleRate*16*2/8)/out_size;
+    // qDebug()<<"out_size"<<out_size<<"len"<<len;
+    emit audioFrameDataUpdateSig((const char*)m_audioOutBuffer,out_size);
     return 0;
 }
 
@@ -254,11 +333,10 @@ enum AVPixelFormat Decoder::get_hw_format(AVCodecContext *ctx,
 }
 void Decoder::startDecode()
 {
+
     int ret = 0;
-    src_filename = "rtsp://admin:123456@10.12.13.237:554/H264?ch=1&subtype=0";
+    src_filename = m_url;
     //    src_filename = "record.dat";
-    video_dst_filename = "videoDes";
-    audio_dst_filename = "audioDes";
     while((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
         qDebug()<<av_hwdevice_get_type_name(type);
 #ifdef HW_DECODE
@@ -272,17 +350,19 @@ void Decoder::startDecode()
         return;
     }
 #endif
-    qDebug()<<"here1";
+    qDebug("before open input");
     /* open input file, and allocate format context */
     if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
         qDebug()<<"Could not open source file"<<src_filename;
         return;
     }
+    qDebug("before open stream");
     /* retrieve stream information */
     if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
         qDebug()<<"Could not find stream information\n";
         return;
     }
+    qDebug("before open open_codec_context");
     if (open_codec_context(&video_stream_idx, &video_dec_ctx, fmt_ctx, AVMEDIA_TYPE_VIDEO) >= 0) {
         video_stream = fmt_ctx->streams[video_stream_idx];
         /* allocate image where the decoded image will be put */
@@ -295,6 +375,24 @@ void Decoder::startDecode()
         video_dst_bufsize = av_image_get_buffer_size(pix_fmt,width,
                                         height, 1);
         video_dst_data = (uint8_t*)av_malloc(video_dst_bufsize);
+        emit frameInfoUpdateSig(width,height,AV_PIX_FMT_YUV420P);
+#ifdef HW_DECODE
+        m_sws_ctx = sws_getContext(width, height,
+                                                    AV_PIX_FMT_NV12,
+                                                    width, height,
+                                                    AV_PIX_FMT_YUV420P,
+                                                    SWS_BILINEAR, NULL, NULL, NULL);
+
+        if (!m_sws_ctx) {
+            fprintf(stderr, "Could not initialize the conversion context\n");
+            exit(1);
+        }
+        // 使用av_image_alloc分配空间
+        av_image_alloc(yuv420p_data, yuv420p_linesize, width, height, AV_PIX_FMT_YUV420P, 1);
+#endif
+        qDebug()<<"before new YUVData";
+        yuv = new YUVData(width,height);
+        qDebug()<<"after new YUVData";
         if (ret < 0) {
             qFatal()<<"Could not allocate raw video buffer";
             goto end;
@@ -302,9 +400,22 @@ void Decoder::startDecode()
         qDebug()<<"video_dst_bufsize"<<video_dst_bufsize;
     }
     if (open_codec_context(&audio_stream_idx, &audio_dec_ctx, fmt_ctx, AVMEDIA_TYPE_AUDIO) >= 0) {
+        // qDebug()<<"nb_channels"<<audio_dec_ctx->ch_layout.nb_channels<<"sample_fmt"<<audio_dec_ctx->sample_fmt<<"sample_rate"<<audio_dec_ctx->sample_rate<<"audio_dec_ctx"<<audio_dec_ctx->codec_id;
         audio_stream = fmt_ctx->streams[audio_stream_idx];
+        m_outSampleFormat = AV_SAMPLE_FMT_S16;
+        m_outSampleRate = 16000;
+        swr_alloc_set_opts2(&m_swr_ctx,
+                             &audio_dec_ctx->ch_layout,
+                             m_outSampleFormat,
+                             m_outSampleRate,
+                             &audio_dec_ctx->ch_layout,
+                             audio_dec_ctx->sample_fmt,
+                             audio_dec_ctx->sample_rate,
+                             0,NULL);
+        swr_init(m_swr_ctx);
+        m_audioOutBuffer = (uint8_t*)av_malloc(MAX_AUDIO_FRAME_SIZE*2);
+        qDebug()<<"after av_malloc";
     }
-    qDebug()<<"here2";
     /* dump input information to stderr */
     av_dump_format(fmt_ctx, 0, src_filename, 0);
     if (!audio_stream && !video_stream) {
@@ -327,10 +438,9 @@ void Decoder::startDecode()
         ret = AVERROR(ENOMEM);
         goto end;
     }
-    qDebug()<<"here3";
 
     /* read frames from the file */
-
+    qDebug()<<"before m_mutex.lock();";
     m_mutex.lock();
     while (av_read_frame(fmt_ctx, pkt) >= 0 ) {
         // check if the packet belongs to a stream we are interested in, otherwise
@@ -354,15 +464,13 @@ end:
 
     return;
 }
-void Decoder::setVideoSink(QVideoSink* videoSink)
-{
-    m_videoSink = videoSink;
-}
-void Decoder::moveThread()
+void Decoder::moveThread(QString url)
 {
     qDebug()<<"start thread";
-    Decoder::instance()->moveToThread(&m_thread);
-    QObject::connect(&m_thread, &QThread::started, Decoder::instance(), &Decoder::startDecode);
+    // m_videoSink = vidoSink;
+    m_url = url.toUtf8().data();
+    this->moveToThread(&m_thread);
+    QObject::connect(&m_thread, &QThread::started, this, &Decoder::startDecode);
     m_thread.start();
 }
 void Decoder::quitThread()
@@ -372,53 +480,51 @@ void Decoder::quitThread()
 }
 void Decoder::stopRecord()
 {
+    if(!video_dec_ctx)
+        return;
+    qDebug()<<"stop start";
     isOver = true;
     m_mutex.lock();
     if (video_dec_ctx)
         decode_packet(video_dec_ctx, NULL);
     if (audio_dec_ctx)
         decode_packet(audio_dec_ctx, NULL);
-
-    printf("Demuxing succeeded.\n");
-
-    if (video_stream) {
-        qDebug()<<"Play the output video file with the command:";
-        qDebug()<<"ffplay -f rawvideo -pix_fmt"<<av_get_pix_fmt_name(pix_fmt)<<"-video_size"<<width<<"x"<<height<<video_dst_filename;
-    }
-
-    if (audio_stream) {
-        enum AVSampleFormat sfmt = audio_dec_ctx->sample_fmt;
-        int n_channels = audio_dec_ctx->ch_layout.nb_channels;
-        const char *fmt;
-
-        if (av_sample_fmt_is_planar(sfmt)) {
-            const char *packed = av_get_sample_fmt_name(sfmt);
-            qDebug()<<"Warning: the sample format the decoder produced is planar "<<packed<<"This example will output the first channel only.\n";
-            sfmt = av_get_packed_sample_fmt(sfmt);
-            n_channels = 1;
-        }
-
-        if ((get_format_from_sample_fmt(&fmt, sfmt)) < 0)
-            goto out;
-
-        qDebug()<<"Play the output audio file with the command:";
-        qDebug()<<"ffplay -f"<<fmt<<"-ac"<<n_channels<<"-ar"<<audio_dec_ctx->sample_rate<<audio_dst_filename;
-
-    }
-    //    qDebug()<<"before avcodec_free_context";
+       // qDebug()<<"before avcodec_free_context";
     avcodec_free_context(&video_dec_ctx);
-    //    qDebug()<<"before avcodec_free_context";
+       // qDebug()<<"before avcodec_free_context";
     avcodec_free_context(&audio_dec_ctx);
-    //    qDebug()<<"before avformat_close_input";
+       // qDebug()<<"before avformat_close_input";
     avformat_close_input(&fmt_ctx);
-    //    qDebug()<<"before av_packet_free";
+       // qDebug()<<"before av_packet_free";
     av_packet_free(&pkt);
-    //    qDebug()<<"before av_frame_free";
+       // qDebug()<<"before av_frame_free";
     av_frame_free(&frame);
-    av_frame_free(&sw_frame);
-    //    qDebug()<<"before av_free";
+    sw_frame = NULL;
+       // qDebug()<<"before av_free";
     av_free(video_dst_data);
+       // qDebug()<<"before delete yuv";
+    delete yuv;
+ // qDebug()<<"before sws_freeContext";
+
+    if(m_sws_ctx)
+    {
+        sws_freeContext(m_sws_ctx);
+        // 释放YUV420P数据
+        av_freep(&yuv420p_data[0]);
+    }
+    //这句会崩
+    // av_freep(m_audioOutBuffer);
+    if(m_swr_ctx)
+        swr_free(&m_swr_ctx);
+
 out:
     m_mutex.unlock();
-
+    qDebug()<<"stop over";
+}
+YUVData* Decoder::getFrame()
+{
+    if(sw_frame)
+        return yuv;
+    else
+        return NULL;
 }

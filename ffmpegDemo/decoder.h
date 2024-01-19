@@ -18,23 +18,57 @@ extern "C"{
     #include <libavutil/pixdesc.h>
     #include <libavutil/hwcontext.h>
     #include <libavutil/opt.h>
+    #include <libswscale/swscale.h>
+    #include <libswresample/swresample.h>
 }
+typedef struct YUVData{
+   YUVData(int w,int h)
+   {
+       yLineSize = w;
+       uLineSize = w;
+       vLineSize = w;
+       this->h = h;
+       Y = new uint8_t[w * h];
+       U = new uint8_t[w * h / 2];
+       V = new uint8_t[w * h / 2];
+   }
+   ~YUVData(){
+       // if(Y)
+       //  delete []Y;
+       // if(U)
+       //  delete []U;
+       // if(V)
+       //  delete []V;
+   }
 
+   uint8_t* Y;
+   uint8_t* U;
+   uint8_t* V;
+   uint8_t* data;
+   int yLineSize;
+   int uLineSize;
+   int vLineSize;
+   int h;
+}YUVData;
 class Decoder :public QObject
 {
     Q_OBJECT
 public:
     Decoder();
     ~Decoder();
-    static Decoder* instance()
-    {
-        static Decoder* ins = new Decoder();
-        return ins;
-    }
+    YUVData* getFrame();
+//    static Decoder* instance()
+//    {
+//        static Decoder* ins = new Decoder();
+//        return ins;
+//    }
+signals:
+    void frameInfoUpdateSig(int width,int height,int format);
+    void frameDataUpdateSig();
+    void audioFrameDataUpdateSig(const char *data, qint64 len);
 public slots:
-    void setVideoSink(QVideoSink* videoSink);
     void startDecode();
-    void moveThread();
+    void moveThread(QString url);
     void quitThread();
     void stopRecord();
 private:
@@ -56,12 +90,11 @@ private:
     enum AVPixelFormat pix_fmt;
     AVStream *video_stream = NULL, *audio_stream = NULL;
     const char *src_filename = NULL;
-    const char *video_dst_filename = NULL;
-    const char *audio_dst_filename = NULL;
     FILE *video_dst_file = NULL;
     FILE *audio_dst_file = NULL;
 
     uint8_t *video_dst_data = {NULL};
+
     int      video_dst_linesize[4];
     int video_dst_bufsize;
 
@@ -78,10 +111,20 @@ private:
     AVBufferRef *hw_device_ctx = NULL;
     bool isOver = false;
 
-    QVideoSink* m_videoSink;
     QThread m_thread;
     QMutex m_mutex;
 
+    char* m_url;
+
+   YUVData* yuv;
+
+   SwsContext* m_sws_ctx;
+   SwrContext *m_swr_ctx;
+   int yuv420p_linesize[3];
+   uint8_t* yuv420p_data[3];
+   uint8_t * m_audioOutBuffer = NULL;
+   AVSampleFormat m_outSampleFormat;
+   int m_outSampleRate;
 };
 
 #endif // DECODER_H

@@ -15,6 +15,8 @@ include_directories(${OPENCV_INCLUDE_DIR})
 include_directories(${FFMPEG_INCLUDE_DIR})
 find_package(Qt6 6.4 REQUIRED COMPONENTS Quick)
 find_package(Qt6 REQUIRED COMPONENTS Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS OpenGL)
+find_package(Qt6 REQUIRED COMPONENTS Gui)
 qt_standard_project_setup()
 
 qt_add_executable(appffmpegDemo
@@ -25,11 +27,11 @@ qt_add_qml_module(appffmpegDemo
     URI ffmpegDemo
     VERSION 1.0
     QML_FILES Main.qml
-    SOURCES frameprovider.h frameprovider.cpp
-    RESOURCES
-    SOURCES mux.cpp mux.h
-    SOURCES decoder.h decoder.cpp
-
+   SOURCES decoder.h decoder.cpp
+   QML_FILES ZN_MediaPlayer.qml
+   SOURCES i420render.h i420render.cpp
+   SOURCES videoitem.h videoitem.cpp
+   SOURCES nv12render.h nv12render.cpp
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
@@ -48,7 +50,7 @@ target_link_libraries(appffmpegDemo
     PRIVATE ${OPENCV_LIBS}
     PRIVATE ${FFMPEG_LIBS}
     PRIVATE Qt6::Multimedia
-
+    PRIVATE Qt6::OpenGL
 )
 
 include(GNUInstallDirs)
