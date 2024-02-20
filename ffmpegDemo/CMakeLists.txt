@@ -3,14 +3,13 @@ cmake_minimum_required(VERSION 3.16)
 project(ffmpegDemo VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY D:/ffmpegLib/bin)
 set(FFMPEG_LIB_DIR "D:/ffmpegLib/lib")
-set(DH_LIB_DIR "D:/code/MES/tools/ConfigTools/lib/dh")
 set(FFMPEG_INCLUDE_DIR "D:/ffmpegLib/include")
-set(DH_INCLUDE_DIR "D:/code/MES/tools/ConfigTools/include/dh")
-file(GLOB DH_LIBS ${DH_LIB_DIR}/*.lib)
+# set(DH_INCLUDE_DIR "D:/code/MES/tools/ConfigTools/include/dh")
 file(GLOB FFMPEG_LIBS ${FFMPEG_LIB_DIR}/*.lib)
 include_directories(${FFMPEG_INCLUDE_DIR})
-include_directories(${DH_INCLUDE_DIR})
+# include_directories(${DH_INCLUDE_DIR})
 find_package(Qt6 6.4 REQUIRED COMPONENTS Quick)
 find_package(Qt6 REQUIRED COMPONENTS Multimedia)
 find_package(Qt6 REQUIRED COMPONENTS OpenGL)
@@ -25,12 +24,13 @@ qt_add_qml_module(appffmpegDemo
     URI ffmpegDemo
     VERSION 1.0
     QML_FILES Main.qml
-    RESOURCE_PREFIX /
    SOURCES decoder.h decoder.cpp
    QML_FILES ZN_MediaPlayer.qml
    SOURCES i420render.h i420render.cpp
    SOURCES videoitem.h videoitem.cpp
    SOURCES nv12render.h nv12render.cpp
+   # SOURCES audioitem.h audioitem.cpp
+    # SOURCES dhstream.h dhstream.cpp
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
@@ -46,9 +46,7 @@ set_target_properties(appffmpegDemo PROPERTIES
 
 target_link_libraries(appffmpegDemo
     PRIVATE Qt6::Quick
-    PRIVATE ${OPENCV_LIBS}
     PRIVATE ${FFMPEG_LIBS}
-    PRIVATE ${DH_LIBS}
     PRIVATE Qt6::Multimedia
     PRIVATE Qt6::OpenGL
 )

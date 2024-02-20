@@ -4,7 +4,7 @@ import QtQuick.Window
 import QtMultimedia
 import QtQuick.Controls
 // import ZN_VideoInput 1.0
-
+// import DHStream 1.0
 Window {
     property int videoW: 500
     property int videoH: videoW * 9 / 16
@@ -25,18 +25,40 @@ Window {
     //         }
     //     }
     // }
-   GridView{
-       id: gridView
-       anchors.fill: parent
-       cellHeight: parent.height / 4
-       cellWidth: parent.width / 4
-       model: 4
-       delegate: ZN_MediaPlayer{
-           width: gridView.cellWidth
-           height: gridView.cellHeight
+   Component{
+       id:gridView
+       GridView{
+           anchors.fill: parent
+           cellHeight: parent.height / 4 + 100
+           cellWidth: parent.width / 4
+           model: 1
+           delegate: ZN_MediaPlayer{
+               width: cellWidth
+               height: cellHeight
 
+           }
        }
    }
+   Component{
+       id: mediaPlayerCom
+       Rectangle{
+           border.width: 1
+           height:500
+           width:500
+           ZN_MediaPlayer{
+               id: mediaPlayer
+               anchors.fill: parent
+               Component.onCompleted: {
+                    mediaPlayer.play()
+               }
+           }
+       }
+   }
+    Loader{
+        id: loader
+        sourceComponent:mediaPlayerCom
+    }
+
 
    // ZN_MediaPlayer{
    //     width: videoW
@@ -78,9 +100,10 @@ Window {
 //        }
 //    }
     Component.onCompleted: {
-
+        // DHStream.startStream()
     }
     Component.onDestruction: {
+        // DHStream.stopStream()
 //        ZN_VideoInput.closeDecoders()
     }
 

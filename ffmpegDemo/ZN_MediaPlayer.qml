@@ -4,78 +4,71 @@ import QtMultimedia
 import VideoItem 1.0
 Item {
     id: root
-    property alias myurl: textInput.text
-    signal sourceChangedSig()
-    function stopDecode()
+    property int videoChannelId: 0
+    property string source: "rtsp://admin:admin@192.168.1.86:554/H264?ch=1&subtype=0"
+    signal znMediaStatusChanged()
+    // property int mediaStatus: videoLoader.item.mediaStatus
+    enum MediaStatusType{
+        LoadingMedia,
+        BufferedMedia
+    }
+
+    function play()
     {
-        videoItem.stopDecoder()
-    }
-
-    Popup{
-        id: urlInputPopup
-        anchors.centerIn: Overlay.overlay
-        width: 150
-        height: 100
-        background: Rectangle{
-            radius: 5
-
-            border.width: 1
-            border.color: "grey"
+        if(videoLoader.sourceComponent === videoItem)
+            return;
+        if(source !== "")
+        {
+            videoLoader.sourceComponent = videoItem
 
         }
-        Column{
-            id: popupContent
-            anchors.fill: parent
-            spacing: 10
-            TextField{
-                width: parent.width
-                height:20
-                id: textInput
-                text: "rtsp://admin:123456@10.12.13.237:554/H264?ch=1&subtype=0"
-            }
-            Button{
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: 50
-                height: 30
-                text: "确认"
-                onClicked:  {
-                    videoItem.setSource(myurl)
-                    // sourceChangedSig()
-                    urlInputPopup.close()
-                }
+    }
+    function stop()
+    {
+        if(videoLoader.sourceComponent)
+        {
+            videoLoader.sourceComponent = null
+        }
+        source = ""
+    }
 
-            }
+    Connections {
+        target: videoLoader.item
+        function onVideoInfoChangedSig() {
+            videoLoader.sourceComponent = null
+            videoLoader.sourceComponent = videoItem
+        }
+        function onVideoErrorSig(){
+            videoLoader.sourceComponent = null
         }
     }
-    Column{
-        id: col
+    Loader{
+        id: videoLoader
+        visible: true
         anchors.fill: parent
-        Row{
-            Button{
-                id: urlPopupBtn
-                width: 100
-                height: 50
-                text: "打开"
-                onClicked: {
-                    urlInputPopup.open()
-                }
-            }
-            Button{
-                width: 100
-                height: 50
-                text: "关闭"
-                onClicked: {
-                    videoItem.stopDecoder()
-                }
-            }
-        }
+    }
+    Component{
+        id: videoItem
         VideoItem{
-            id: videoItem
-            width: height * 16 / 9
-            height: parent.height - urlPopupBtn.height
+            anchors.centerIn: parent
+            isAudioOutput: true
+            channelId: videoChannelId
+            videoSource:root.source
+            fillMode: VideoItem.PreserveAspectFit
+            onMediaStatusChanged: {
+                root.mediaStatus = mediaStatus
+                root.znMediaStatusChanged()
+            }
+
+            Component.onCompleted: {
+                start()
+            }
             Component.onDestruction: {
-                stopDecoder()
+                stop()
             }
         }
+    }
+    Component.onDestruction: {
+        videoLoader.sourceComponent = null
     }
 }
