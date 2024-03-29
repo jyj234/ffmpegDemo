@@ -31,25 +31,40 @@ Window {
            anchors.fill: parent
            cellHeight: parent.height / 4 + 100
            cellWidth: parent.width / 4
-           model: 1
+           model: 2
            delegate: ZN_MediaPlayer{
                width: cellWidth
                height: cellHeight
-
+               x:index % 4 * width
+               y:index / 4 * height
            }
        }
    }
    Component{
        id: mediaPlayerCom
-       Rectangle{
-           border.width: 1
-           height:500
-           width:500
-           ZN_MediaPlayer{
-               id: mediaPlayer
-               anchors.fill: parent
-               Component.onCompleted: {
-                    mediaPlayer.play()
+       Row{
+           Button{
+               width: 100
+               height: 100
+               onClicked: {
+                   mediaPlayer.click()
+               }
+           }
+
+           Rectangle{
+               border.width: 1
+               height:400
+               width:400
+               ZN_MediaPlayer{
+                   id: mediaPlayer
+                   isAudio:false
+                   // source: "D:\\code\\Qt\\encode\\video\\sei.h265"
+                   // source: "rtsp://admin:123456@10.12.5.107:554/H264?ch=1&subtype=0"
+                   source: "rtsp://admin:admin@192.168.1.86:554/H264?ch=1&subtype=0"
+                   anchors.fill: parent
+                   Component.onCompleted: {
+                        play()
+                   }
                }
            }
        }

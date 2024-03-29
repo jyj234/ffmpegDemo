@@ -1,7 +1,5 @@
 #ifndef VIDEOITEM_H
 #define VIDEOITEM_H
-
-#pragma pack(push, 8)   // 保存并设置到8字节对齐
 #include "decoder.h"
 #include <QQuickFramebufferObject>
 #include <QQuickItem>
@@ -12,9 +10,8 @@
 #include <QAudioSink>
 #include <QMediaDevices>
 #include <QOpenGLFramebufferObject>
+#include <QTimer>
 #include "i420render.h"
-
-// #include <QQuickWindow>
 class VideoItem : public QQuickFramebufferObject
 {
     Q_OBJECT
@@ -37,6 +34,7 @@ public:
     Q_PROPERTY(int channelId READ channelId WRITE setChannelId NOTIFY channelIdChanged);
     Q_PROPERTY(QString videoSource READ videoSource WRITE setVideoSource NOTIFY videoSourceChanged);
     Q_PROPERTY(ZNLoadingStatus mediaStatus READ mediaStatus WRITE setMediaStatus NOTIFY mediaStatusChanged);
+    Q_PROPERTY(int timeoutDuration READ timeoutDuration WRITE setTimeoutDuration NOTIFY timeoutDurationChanged);
 
     // YUVData getFrame(bool& got);
     bool infoDirty() const
@@ -59,6 +57,14 @@ public:
     {
         return m_videoFormat;
     }
+    bool isAudioOutput() const
+    {
+        return m_isAudioOutput;
+    }
+    int timeoutDuration() const
+    {
+        return m_timeoutDuration;
+    }
     void onAudioFrameDataUpdateSig(const char *data, qint64* len,QMutex* audioMutex);
 signals:
     void isAudioOutputChanged();
@@ -68,11 +74,15 @@ signals:
     void videoErrorSig();
     void videoSourceChanged();
     void mediaStatusChanged();
+    void timeoutDurationChanged();
 public slots:
     void start();
     void stop();
     void onVideoInfoReady(int width, int height, int format);
     void onLoadSuccessSig();
+    void myrotate();
+    void resize(int flag);
+    void drag(float deltx,float delty);
 
 public:
     Renderer* createRenderer() const override;
@@ -85,10 +95,6 @@ public:
     // int m_timerId;
     // QTimer m_timer;
 private:
-    bool isAudioOutput() const
-    {
-        return m_isAudioOutput;
-    }
     FillModeType fillMode() const
     {
         return m_fillMode;
@@ -111,8 +117,15 @@ private:
     void setChannelId(int channelId);
     void setVideoSource(QString source);
     void setMediaStatus(ZNLoadingStatus mediaStatus);
+    void setTimeoutDuration(int timeoutDuration)
+    {
+        m_timeoutDuration = timeoutDuration;
+        qDebug()<<"setTimeoutDuration"<<timeoutDuration;
+        emit timeoutDurationChanged();
+    }
 
     void handleStateChanged(QAudio::State newState);
+    void onFrameDataUpdateSig();
     QAudioSink* m_audioSink;
 
     QIODevice* m_ioDevice;
@@ -127,6 +140,6 @@ private:
     QThread* m_thread;
     ZNLoadingStatus m_mediaStatus;
     QMutex m_audioMutex;
+    int m_timeoutDuration;
 };
-#pragma pack(pop)       // 恢复以前的打包对齐
 #endif // VIDEOITEM_H

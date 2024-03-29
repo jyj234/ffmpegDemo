@@ -19,6 +19,9 @@ extern "C"{
 #include <libavutil/opt.h>
 #include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
+#include <libavutil/opt.h>
 }
 
 class VideoItem;
@@ -49,6 +52,7 @@ public:
     Decoder(VideoItem* parent);
     ~Decoder();
     YUVData* getFrame();
+    int rotate(double angle);
     void pushData(unsigned char* data,unsigned long len);
     QPair<unsigned char *,unsigned long> m_streamData;
     QMutex m_streamMutex;
@@ -62,12 +66,8 @@ public:
     unsigned char* m_dataBuffer;
     unsigned long m_dataBufferMaxSize;
     unsigned long m_dataBufferCurSize;
-    // void freeDecoder();
-    //    static Decoder* instance()
-    //    {
-    //        static Decoder* ins = new Decoder();
-    //        return ins;
-    //    }
+    void resize(int flag);
+    void drag(float deltx,float delty);
 signals:
     void frameInfoUpdateSig(int width,int height,int format);
     void frameDataUpdateSig();
@@ -89,6 +89,7 @@ private:
     static enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
                                             const enum AVPixelFormat *pix_fmts);
     int hw_decoder_init(AVCodecContext *ctx, const enum AVHWDeviceType type);
+    int init_filters(const char *filters_descr);
 
 private:
     AVFormatContext *fmt_ctx = NULL;
@@ -138,8 +139,22 @@ private:
     qint64 m_outsize = 0;
     QMutex m_audioMutex;
     bool m_isFirstFrame;
-
-
+    bool isAudioOutput;
+    AVFilterGraph *m_filter_graph;
+    AVFilterContext *m_buffersink_ctx;
+    AVFilterContext *m_buffersrc_ctx;
+    AVFrame *m_filt_frame;
+    AVFilterInOut *m_filterOutputs;
+    AVFilterInOut *m_filterInputs;
+    const AVFilter * m_buffersrc;
+    const AVFilter * m_buffersink;
+    QMutex m_filterMutex;
+    int m_resizeLevel;
+    int m_cropCenterX;
+    int m_cropCenterY;
+    float m_zoomInPara;//0-1
+    uint m_maxZoomLevel;
+    float m_dragPara;
 };
 
 #endif // DECODER_H

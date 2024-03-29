@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 project(ffmpegDemo VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY D:/ffmpegLib/bin)
+# set(CMAKE_RUNTIME_OUTPUT_DIRECTORY D:/ffmpegLib/bin)
 set(FFMPEG_LIB_DIR "D:/ffmpegLib/lib")
 set(FFMPEG_INCLUDE_DIR "D:/ffmpegLib/include")
 # set(DH_INCLUDE_DIR "D:/code/MES/tools/ConfigTools/include/dh")

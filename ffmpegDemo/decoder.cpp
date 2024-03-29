@@ -4,9 +4,12 @@
 typedef enum AVPixelFormat (*AVPixelFormatFunc)(AVCodecContext *, const enum AVPixelFormat *);
 enum AVPixelFormat Decoder::hw_pix_fmt = AV_PIX_FMT_NONE;
 // static FILE* file = fopen("D:/ffmpeg-6.0-essentials_build/bin/audiodata","wb");
-#define MAX_AUDIO_FRAME_SIZE 50 * 1024
+#define MAX_AUDIO_FRAME_SIZE 100 * 1024
 #define MAX_AVIO_SIZE 1000 * 1024
 #define MAX_PACKET_SIZE 800 * 1024
+#define ZN_AVERROR_FRAME_SIZE_CHANGED FFERRTAG(0xF8, 'F', 'S', 'C')
+const char *filter_descr = "drawtext=fontsize=100:fontcolor=red:x=20:y=20:text='";
+char filters_descr[50] = "rotate=1.57";
 Decoder::Decoder(VideoItem* parent)
     : m_swr_ctx(NULL)
     , m_sws_ctx(NULL)
@@ -21,11 +24,27 @@ Decoder::Decoder(VideoItem* parent)
     , m_avioCtx(NULL)
     , m_dataBuffer(NULL)
     , m_isFirstFrame(false)
+    , audio_dec_ctx(NULL)
+    , m_filt_frame(NULL)
+    , m_filter_graph(NULL)
+    , m_buffersrc(NULL)
+    , m_buffersink(NULL)
+    , m_filterOutputs(NULL)
+    , m_filterInputs(NULL)
+    , m_buffersink_ctx(NULL)
+    , m_buffersrc_ctx(NULL)
+    , m_resizeLevel(0)
+    , m_cropCenterX(0)
+    , m_cropCenterY(0)
+    , m_zoomInPara(0.75)
+    , m_dragPara(0.2)
+    , m_maxZoomLevel(7)
 
 {
     m_dataBuffer = new unsigned char[MAX_PACKET_SIZE];
     m_dataBufferMaxSize = MAX_PACKET_SIZE;
     m_videoItem = parent;
+    isAudioOutput = m_videoItem->isAudioOutput();
 }
 Decoder::~Decoder()
 {
@@ -36,6 +55,135 @@ Decoder::~Decoder()
         delete []m_dataBuffer;
     // fclose(file);
 }
+int Decoder::rotate(double angle)
+{
+
+    int ret = 0;
+    sprintf(filters_descr,"rotate=%lf",angle);
+    init_filters(filters_descr);
+    return ret;
+}
+void Decoder::resize(int flag)
+{
+    if((m_resizeLevel == 0 && flag < 0) || (m_resizeLevel == m_maxZoomLevel && flag >0))
+        return;
+    if(!(m_zoomInPara > 0 && m_zoomInPara < 1))
+        return;
+    int oldw = video_dec_ctx->width * std::pow(m_zoomInPara,m_resizeLevel);
+    int oldh = video_dec_ctx->height * std::pow(m_zoomInPara,m_resizeLevel);
+    m_resizeLevel += flag;
+    int w = video_dec_ctx->width * std::pow(m_zoomInPara,m_resizeLevel);
+    int h = video_dec_ctx->height * std::pow(m_zoomInPara,m_resizeLevel);
+    int deltx = w - oldw;
+    int delty = h - oldh;
+    if(flag > 0)
+    {
+        m_cropCenterX -= deltx / 2;
+        m_cropCenterY -= delty / 2;
+    }
+    else if(flag < 0)
+    {
+        m_cropCenterX = std::min(video_dec_ctx->width - w,std::max(0,m_cropCenterX - deltx / 2));
+        m_cropCenterY = std::min(video_dec_ctx->height - h,std::max(0,m_cropCenterY - delty / 2));
+    }
+    std::string resizeStr = "crop=" + std::to_string(w) + ":" + std::to_string(h)
+                            + ":" + std::to_string(m_cropCenterX) + ":" + std::to_string(m_cropCenterY) + ",scale="
+                            + std::to_string(video_dec_ctx->width) + ":" + std::to_string(video_dec_ctx->height);
+    init_filters(resizeStr.c_str());
+
+}
+void Decoder::drag(float deltx,float delty)
+{
+    if(m_resizeLevel <= 0)
+        return;
+    int w = video_dec_ctx->width * std::pow(m_zoomInPara,m_resizeLevel);
+    int h = video_dec_ctx->height * std::pow(m_zoomInPara,m_resizeLevel);
+    int tmpCropCenterX = m_cropCenterX - w * deltx * m_dragPara;
+    int tmpCropCenterY = m_cropCenterY - h * delty * m_dragPara;
+    if(tmpCropCenterX >= 0 && tmpCropCenterX + w <= video_dec_ctx->width)
+        m_cropCenterX = tmpCropCenterX;
+    if(tmpCropCenterY >= 0 && tmpCropCenterY + h <= video_dec_ctx->height)
+        m_cropCenterY = tmpCropCenterY;
+    std::string resizeStr = "crop=" + std::to_string(w) + ":" + std::to_string(h)
+                            + ":" + std::to_string(m_cropCenterX) + ":" + std::to_string(m_cropCenterY) + ",scale="
+                            + std::to_string(video_dec_ctx->width) + ":" + std::to_string(video_dec_ctx->height);
+    init_filters(resizeStr.c_str());
+}
+
+int Decoder::init_filters(const char *filters_descr)
+{
+    m_filterMutex.lock();
+    char args[512];
+    int ret = 0;
+    if(!m_buffersrc)
+        m_buffersrc  = avfilter_get_by_name("buffer");
+    if(!m_buffersink)
+        m_buffersink = avfilter_get_by_name("buffersink");
+    if(!m_filterOutputs)
+        m_filterOutputs = avfilter_inout_alloc();
+    if(!m_filterInputs)
+        m_filterInputs  = avfilter_inout_alloc();
+    AVRational time_base = fmt_ctx->streams[video_stream_idx]->time_base;
+    enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE };
+
+    if(m_filter_graph)
+        avfilter_graph_free(&m_filter_graph);
+    m_filter_graph = avfilter_graph_alloc();
+    if (!m_filterOutputs || !m_filterInputs || !m_filter_graph) {
+        ret = AVERROR(ENOMEM);
+        goto end;
+    }
+
+    /* buffer video source: the decoded frames from the decoder will be inserted here. */
+    snprintf(args, sizeof(args),
+             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+             video_dec_ctx->width, video_dec_ctx->height, video_dec_ctx->pix_fmt,
+             time_base.num, time_base.den,
+             video_dec_ctx->sample_aspect_ratio.num, video_dec_ctx->sample_aspect_ratio.den);
+
+    ret = avfilter_graph_create_filter(&m_buffersrc_ctx, m_buffersrc, "in",
+                                       args, NULL, m_filter_graph);
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create buffer source\n");
+        goto end;
+    }
+
+    /* buffer video sink: to terminate the filter chain. */
+    ret = avfilter_graph_create_filter(&m_buffersink_ctx, m_buffersink, "out",
+                                       NULL, NULL, m_filter_graph);
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create buffer sink\n");
+        goto end;
+    }
+
+    ret = av_opt_set_int_list(m_buffersink_ctx, "pix_fmts", pix_fmts,
+                              AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot set output pixel format\n");
+        goto end;
+    }
+
+    m_filterOutputs->name       = av_strdup("in");
+    m_filterOutputs->filter_ctx = m_buffersrc_ctx;
+    m_filterOutputs->pad_idx    = 0;
+    m_filterOutputs->next       = NULL;
+
+    m_filterInputs->name       = av_strdup("out");
+    m_filterInputs->filter_ctx = m_buffersink_ctx;
+    m_filterInputs->pad_idx    = 0;
+    m_filterInputs->next       = NULL;
+
+    if ((ret = avfilter_graph_parse_ptr(m_filter_graph, filters_descr,
+                                        &m_filterInputs, &m_filterOutputs, NULL)) < 0)
+        goto end;
+
+    if ((ret = avfilter_graph_config(m_filter_graph, NULL)) < 0)
+        goto end;
+
+end:
+    m_filterMutex.unlock();
+    return ret;
+}
 int Decoder::output_video_frame(AVFrame *frame)
 {
     // qDebug()<<"start output_video_frame";
@@ -45,8 +193,23 @@ int Decoder::output_video_frame(AVFrame *frame)
             * decode the following frames into another rawvideo file. */
         qDebug()<<"changed"<<"now: width"<<width<<"height"<<height;
         qDebug()<<"frame:"<<"width"<<frame->width<<"height"<<frame->height;
-        return -1;
+        return ZN_AVERROR_FRAME_SIZE_CHANGED;
     }
+    const AVFrameSideData *sei_data = av_frame_get_side_data(frame, AV_FRAME_DATA_SEI_UNREGISTERED);
+    if(sei_data)
+    {
+        // std::string seiText(reinterpret_cast<char*>(sei_data->data + 16),sei_data->size - 16);
+        // std::string filterStr = "drawbox=y=0:w=100:h=100:color=red:x=" + std::to_string(sei_data->data[20] * 10) + "'";
+        // qDebug()<<"filterStr"<<filterStr;
+        // init_filters(filterStr.c_str());
+        // qDebug()<<"has sei-data size="<<sei_data->size;
+        // for(int i = 0;i < sei_data->size; ++i)
+        // {
+        //     qDebug("%x ",sei_data->data[i]);
+        // }
+        // qDebug("\n");
+    }
+
     if(!m_isFirstFrame && frame->pict_type ==AV_PICTURE_TYPE_I)
     {
         m_isFirstFrame = true;
@@ -55,36 +218,46 @@ int Decoder::output_video_frame(AVFrame *frame)
     if(!m_isFirstFrame)
         return 0;
 
-    // qDebug()<<"format"<<av_get_pix_fmt_name(pix_fmt)<<"buffer size"<<video_dst_bufsize<<"linesize[0]"<<frame->linesize[0];
-    //    qDebug()<<"video_frame n:"<<video_frame_count++;
-    // qDebug()<<"width"<<frame->width;
-    if (frame->format == hw_pix_fmt) {
-        /* retrieve data from GPU to CPU */
-        if ((av_hwframe_transfer_data(sw_frame, frame, 0)) < 0) {
-            qDebug()<<"Error transferring the data to system memory";
-            return -1;
-        }
-        tmp_frame = sw_frame;
-    } else
-    {
-        tmp_frame = frame;
+    m_filterMutex.lock();
+    /* push the decoded frame into the filtergraph */
+    if (av_buffersrc_add_frame_flags(m_buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Error while feeding the filtergraph\n");
+        return 0;
     }
-    /* copy decoded frame to destination buffer:*/
+    /* pull filtered frames from the filtergraph */
+    while (1) {
+        int ret = av_buffersink_get_frame(m_buffersink_ctx, m_filt_frame);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+            break;
+        if (ret < 0)
+            break;
+        if (frame->format == hw_pix_fmt) {
+            /* retrieve data from GPU to CPU */
+            if ((av_hwframe_transfer_data(sw_frame, m_filt_frame, 0)) < 0) {
+                qDebug()<<"Error transferring the data to system memory";
+                return -1;
+            }
+            tmp_frame = sw_frame;
+        } else
+        {
+            tmp_frame = m_filt_frame;
+        }
+        /* copy decoded frame to destination buffer:*/
+        sws_scale(m_sws_ctx,
+                  (const uint8_t* const*) &tmp_frame->data,  // 源数据
+                  (int*) &tmp_frame->linesize,  // 源数据的行大小
+                  0,              // 从源数据的第几行开始转换
+                  height,   // 要转换的行数
+                  yuv420p_data,   // 目标数据
+                  yuv420p_linesize); // 目标数据的行大小
 
-    sws_scale(m_sws_ctx,
-              (const uint8_t* const*) &tmp_frame->data,  // 源数据
-              (int*) &tmp_frame->linesize,  // 源数据的行大小
-              0,              // 从源数据的第几行开始转换
-              height,   // 要转换的行数
-              yuv420p_data,   // 目标数据
-              yuv420p_linesize); // 目标数据的行大小
-
-    yuv->Y = yuv420p_data[0];
-    yuv->U = yuv420p_data[1];
-    yuv->V = yuv420p_data[2];
-    emit frameDataUpdateSig();
-    // qDebug()<<"frameDataUpdateSig";
-
+        yuv->Y = yuv420p_data[0];
+        yuv->U = yuv420p_data[1];
+        yuv->V = yuv420p_data[2];
+        emit frameDataUpdateSig();
+        av_frame_unref(m_filt_frame);
+    }
+    m_filterMutex.unlock();
     return 0;
 }
 
@@ -113,10 +286,6 @@ int Decoder::output_audio_frame(AVFrame *frame)
                           MAX_AUDIO_FRAME_SIZE,
                           (const uint8_t**)frame->data,
                           frame->nb_samples);
-    // while(m_outsize != 0)
-    // {
-    //     QThread::usleep(100);
-    // }
     m_outsize = av_samples_get_buffer_size(NULL,
                                            frame->ch_layout.nb_channels,
                                            len,
@@ -131,10 +300,15 @@ int Decoder::output_audio_frame(AVFrame *frame)
     if(m_outsize == 0)
         return 0;
     m_audioMutex.lock();
+    // qDebug()<<"audio lock";
+    if(m_audioMediumBufferSize + m_outsize > MAX_AUDIO_FRAME_SIZE)
+    {
+        m_audioMediumBufferSize = 0;
+    }
     memcpy(m_audioMediumBuffer + m_audioMediumBufferSize,m_audioOutBuffer,m_outsize);
     m_audioMediumBufferSize += m_outsize;
-    m_audioMutex.unlock();
-    emit audioDataUpdateSig((const char*)m_audioMediumBuffer,(&m_audioMediumBufferSize),&m_audioMutex);
+    if(m_audioMediumBufferSize > 10 * m_outsize)
+        emit audioDataUpdateSig((const char*)m_audioMediumBuffer,(&m_audioMediumBufferSize),&m_audioMutex);
     // m_audioMediumBufferSize += out_size;
     // if(m_audioMediumBufferSize >= 10 * out_size)
     // {
@@ -142,7 +316,9 @@ int Decoder::output_audio_frame(AVFrame *frame)
     //     m_audioMediumBufferSize = 0;
     // }
     // qDebug()<<"emit audioDataUpdateSig((const char*)m_audioOutBuffer,out_size)";
-
+out:
+    // qDebug()<<"audio unlock";
+    m_audioMutex.unlock();
     return 0;
 }
 
@@ -298,35 +474,17 @@ static int read_buffer(void *opaque, uint8_t *buf, int buf_size){
     Decoder* decoder = (Decoder*)opaque;
     decoder->m_streamMutex.lock();
     // qDebug()<<"read_buffer";
-    // QPair<unsigned char *,DWORD>* tmpData = &(((Decoder*)opaque)->m_streamData);
     QQueue<QPair<unsigned char*,unsigned long>>* tmpData = &(decoder->m_queue);
     int len = 0;
     unsigned char* data = NULL;
     int totallen = 0;
-    // if(tmpData->second == 0)
-    // {
-    //     ((Decoder*)opaque)->m_streamMutex.unlock();
-    //     return 0;
-    // }
-    // memcpy(buf,tmpData->first,tmpData->second);
-    // DWORD len = tmpData->second;
-    // tmpData->second = 0;
     if(decoder->isOver)
     {
-        // while(!tmpData->empty())
-        // {
-        //     delete tmpData->head().first;
-        //     tmpData->pop_front();
-        // }
         totallen = -1;
-        // if(decoder->m_avioCtx && decoder->m_avioCtx->buffer)
-        //     av_freep(decoder->m_avioCtx->buffer);
         qDebug()<<"read buffer end";
         goto out;
     }
-    // qDebug()<<"before m_dataAvailableCondition.wait";
     decoder->m_dataAvailableCondition.wait(&decoder->m_streamMutex,100);
-    // qDebug()<<"after m_dataAvailableCondition.wait";
     if(decoder->m_dataBufferCurSize == 0)
     {
         totallen = 0;
@@ -335,21 +493,6 @@ static int read_buffer(void *opaque, uint8_t *buf, int buf_size){
     memcpy(buf,decoder->m_dataBuffer,decoder->m_dataBufferCurSize);
     totallen = decoder->m_dataBufferCurSize;
     decoder->m_dataBufferCurSize = 0;
-    // while(!tmpData->empty())
-    // {
-    //     data = tmpData->head().first;
-    //     len = tmpData->head().second;
-    //     // qDebug()<<"maxlen"<<maxlen;
-    //     if(totallen + len > buf_size)
-    //     {
-    //         goto out;
-    //     }
-    //     memcpy(buf + totallen,data,len);
-    //     tmpData->pop_front();
-    //     delete data;
-    //     totallen += len;
-    // }
-    // qDebug()<<"read buffer"<<totallen;
     decoder->m_dataNotFullCondition.wakeOne();
 out:
     decoder->m_streamMutex.unlock();
@@ -378,23 +521,8 @@ void Decoder::pushData(unsigned char* data,unsigned long len)
     {
         goto out;
     }
-    // qDebug()<<"after m_dataNotFullCondition.wait";
     memcpy(m_dataBuffer + m_dataBufferCurSize, data,len);
     m_dataBufferCurSize += len;
-    // tmpData = new unsigned char[len];
-    // memcpy(tmpData,data,len);
-    // m_queue.push_back({tmpData,len});
-    // qDebug()<<"pushdata"<<len<<m_streamData.second;
-
-// if(m_streamData.second + len > 300 * 1024)
-// {
-//     qDebug()<<"out of range";
-//     m_streamMutex.unlock();
-//     return;
-// }
-// memcpy(m_streamData.first + m_streamData.second, data , len);
-// m_streamData.second += len;
-// qDebug()<<"pushData"<<len;
 out:
     m_dataAvailableCondition.wakeOne();
     m_streamMutex.unlock();
@@ -404,6 +532,7 @@ void Decoder::startDecode()
     m_mutex.lock();
     bool isError = false;
     int ret = 0;
+    int ret_readFrame = 0;
     while((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
         qDebug()<<av_hwdevice_get_type_name(type);
 #ifdef HW_DECODE
@@ -431,14 +560,22 @@ void Decoder::startDecode()
     }
     /* open input file, and allocate format context */
     qDebug("before avformat_open_input");
-    if (avformat_open_input(&fmt_ctx, m_url.toUtf8().data(), NULL, NULL) < 0) {
+    qDebug()<<m_url.toUtf8().data();
+    qDebug()<<m_url;
+
+    AVDictionary *options = NULL;
+    av_dict_set(&options, "timeout", std::to_string(m_videoItem->timeoutDuration()).c_str(), 0);
+    av_dict_set(&options, "max_delay", "300000", 0);
+    if (avformat_open_input(&fmt_ctx, m_url.toUtf8().data(), NULL, &options) < 0) {
         qDebug()<<"Could not open source file"<<m_url;
+        ret = AVERROR_EXIT;
         goto end;
     }
     qDebug("before open stream");
     /* retrieve stream information */
     if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
         qDebug()<<"Could not find stream information\n";
+        ret = AVERROR_EXIT;
         goto end;
     }
     qDebug("before open open_codec_context");
@@ -460,6 +597,7 @@ void Decoder::startDecode()
 
         if (!m_sws_ctx) {
             fprintf(stderr, "Could not initialize the conversion context\n");
+            ret = AVERROR_EXIT;
             goto end;
         }
         // 使用av_image_alloc分配空间
@@ -474,11 +612,18 @@ void Decoder::startDecode()
         qDebug()<<"after new YUVData";
         if (ret < 0) {
             qDebug()<<"Could not allocate raw video buffer";
+            ret = AVERROR_EXIT;
+            goto end;
+        }
+        if ((ret = init_filters("null")) < 0)
+        {
+            ret = AVERROR_EXIT;
+            qDebug()<<"Could not init_filters";
             goto end;
         }
     }
     else{
-        isError = true;
+        ret = AVERROR_EXIT;
         goto end;
     }
     if (open_codec_context(&audio_stream_idx, &audio_dec_ctx, fmt_ctx, AVMEDIA_TYPE_AUDIO) >= 0) {
@@ -503,19 +648,23 @@ void Decoder::startDecode()
     av_dump_format(fmt_ctx, 0, m_url.toUtf8().data(), 0);
     if (!audio_stream && !video_stream) {
         qDebug()<<"Could not find audio or video stream in the input, aborting";
+        ret = AVERROR_EXIT;
         goto end;
     }
 
     frame = av_frame_alloc();
     sw_frame = av_frame_alloc();
+    m_filt_frame = av_frame_alloc();
     if (!frame) {
         qDebug()<<"Could not allocate frame";
+        ret = AVERROR_EXIT;
         goto end;
     }
 
     pkt = av_packet_alloc();
     if (!pkt) {
         qDebug()<<"Could not allocate packet";
+        ret = AVERROR_EXIT;
         goto end;
     }
 
@@ -527,13 +676,28 @@ void Decoder::startDecode()
         avformat_flush(fmt_ctx);
     }
     qDebug()<<"before av_read_frame";
+    static int cnt = 0;
     while ((ret = av_read_frame(fmt_ctx, pkt)) >= 0 ) {
+            // Decode the packet (omitted for brevity)
+        // qDebug("%x %x %x %x %x %x",pkt->data[0],pkt->data[1],pkt->data[2],pkt->data[3],pkt->data[4],pkt->data[5]);
+            // Check for SEI in side data
+            // qDebug()<<"dts"<<pkt->dts<<cnt++;
+            // for (int i = 0; i < pkt->side_data_elems; i++) {
+            //     AVPacketSideData sd = pkt->side_data[i];
+
+            //     qDebug()<<"side_data"<<sd.size;
+            //     // if (sd.type == AV_PKT_DATA_SEI_UNREGISTERED || sd.type == AV_PKT_DATA_SEI) {
+            //     //     // Process SEI data
+            //     //     // For example, print SEI size
+            //     //     printf("Found SEI data of size: %d\n", sd.size);
+            //     // }
+            // }
         // check if the packet belongs to a stream we are interested in, otherwise
         // skip it
         // qDebug()<<"pts"<<pkt->pts<<"dts"<<pkt->dts;
         if (pkt->stream_index == video_stream_idx)
             ret = decode_packet(video_dec_ctx, pkt);
-        else if (pkt->stream_index == audio_stream_idx)
+        else if (isAudioOutput && pkt->stream_index == audio_stream_idx)
             ret = decode_packet(audio_dec_ctx, pkt);
         av_packet_unref(pkt);
         if (ret < 0 || isOver)
@@ -541,21 +705,49 @@ void Decoder::startDecode()
             qDebug()<<"exit";
             break;
         }
-        QThread::msleep(1);
     }
     qDebug()<<"after over";
 
 end:
-    isOver = true;
-    if(isError)
-    {
-        emit videoErrorSig();
-        qDebug()<<"emit videoErrorSig();";
+    char errbuf[AV_ERROR_MAX_STRING_SIZE];  // 创建足够大的缓存来存储错误描述
+    bool isRestart = true;
+    if(ret_readFrame < 0){
+        isRestart = false;
+        if ( av_strerror(ret_readFrame, errbuf, sizeof(errbuf)) < 0) {
+            snprintf(errbuf, sizeof(errbuf), "Unknown error: %d", ret_readFrame);
+        }
+        fprintf(stderr, "Error occurred: %s\n", errbuf);
     }
-    else if(!isOver)
+    if(ret < 0){
+        if(ret == ZN_AVERROR_FRAME_SIZE_CHANGED || ret == AVERROR_EOF)
+        {
+            sprintf(errbuf,"frame size changed");
+        }
+        else if(ret == AVERROR_INVALIDDATA)
+        {
+            sprintf(errbuf,"coding format changed");
+        }
+        else {
+            isRestart = false;
+            if (av_strerror(ret, errbuf, sizeof(errbuf)) < 0) {
+                snprintf(errbuf, sizeof(errbuf), "Unknown error: %d", ret);
+            }
+        }
+        fprintf(stderr, "Error occurred: %s\n", errbuf);
+    }
+    // isOver = true;
+    if(!isOver)
     {
-        emit frameInfoChangedSig();
-        qDebug()<<"emit frameInfoChangedSig();";
+        if(isRestart)
+        {
+            emit frameInfoChangedSig();
+            qDebug()<<"emit frameInfoChangedSig();";
+        }
+        else
+        {
+            emit videoErrorSig();
+            qDebug()<<"emit videoErrorSig();";
+        }
     }
     m_mutex.unlock();
     return;
@@ -589,6 +781,7 @@ void Decoder::stopDecode()
         avcodec_free_context(&video_dec_ctx);
         qDebug()<<"before delete yuv";
         delete yuv;
+        avfilter_graph_free(&m_filter_graph);
 
     }
     if (audio_dec_ctx)
@@ -598,10 +791,7 @@ void Decoder::stopDecode()
         avcodec_free_context(&audio_dec_ctx);
         qDebug()<<"before swr_free(&m_swr_ctx)";
         if(m_swr_ctx)
-        {
-            swr_close(m_swr_ctx);//在free前需要close，否则当视频开启时关闭程序会崩溃
             swr_free(&m_swr_ctx);
-        }
         qDebug()<<"before av_free(m_audioOutBuffer)";
         if(m_audioOutBuffer)
             av_free(m_audioOutBuffer);
@@ -616,6 +806,8 @@ void Decoder::stopDecode()
     if(frame)
         av_frame_free(&frame);
     sw_frame = NULL;
+    if(m_filt_frame)
+        av_frame_free(&m_filt_frame);
     qDebug()<<"before sws_freeContext";
     if(m_sws_ctx)
     {
@@ -623,8 +815,10 @@ void Decoder::stopDecode()
         // 释放YUV420P数据
         av_freep(&yuv420p_data[0]);
     }
-
-
+    if(m_filterInputs)
+        avfilter_inout_free(&m_filterInputs);
+    if(m_filterOutputs)
+        avfilter_inout_free(&m_filterOutputs);
 out:
     m_mutex.unlock();
     qDebug()<<"stop over";

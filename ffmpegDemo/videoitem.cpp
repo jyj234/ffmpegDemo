@@ -31,12 +31,23 @@ VideoItem::~VideoItem()
 {
     // stop();
 }
+void VideoItem::onFrameDataUpdateSig()
+{
+    update();
+}
 void VideoItem::setIsAudioOutput(const bool &isAudioOutput)
 {
     m_isAudioOutput = isAudioOutput;
     emit isAudioOutputChanged();
 }
-
+void VideoItem::resize(int flag)
+{
+    m_decoder->resize(flag);
+}
+void VideoItem::drag(float deltx,float delty)
+{
+    m_decoder->drag(deltx,delty);
+}
 void VideoItem::start()
 {
     qDebug()<<"VideoItem::start()";
@@ -54,7 +65,6 @@ void VideoItem::start()
         format.setSampleRate(48000);
         format.setChannelCount(1);
         format.setSampleFormat(QAudioFormat::Int16);
-        qDebug()<<"format.bytesPerFrame()"<<format.bytesPerFrame();
         QAudioDevice info(QMediaDevices::defaultAudioOutput());
         if (!info.isFormatSupported(format)) {
             qWarning() << "Raw audio format not supported by backend, cannot play audio.";
@@ -66,7 +76,7 @@ void VideoItem::start()
         connect(m_decoder,&Decoder::audioDataUpdateSig,this,&VideoItem::onAudioFrameDataUpdateSig);
     }
     connect(m_decoder,&Decoder::frameInfoUpdateSig,this,&VideoItem::onVideoInfoReady);
-    connect(m_decoder,&Decoder::frameDataUpdateSig,this,&VideoItem::update);
+    connect(m_decoder,&Decoder::frameDataUpdateSig,this,&VideoItem::onFrameDataUpdateSig);
     connect(m_decoder,&Decoder::frameInfoChangedSig,this,&VideoItem::videoInfoChangedSig);
     connect(m_decoder,&Decoder::videoErrorSig,this,&VideoItem::videoErrorSig);
     connect(m_decoder,&Decoder::loadSuccessSig,this,&VideoItem::onLoadSuccessSig);
@@ -128,9 +138,12 @@ void VideoItem::stop()
             m_audioSink = NULL;
             m_ioDevice = NULL;
         }
+        qDebug()<<"before setIsOver()";
         m_decoder->setIsOver();
         m_thread->quit();
+        qDebug()<<"before wait()";
         m_thread->wait();
+        qDebug()<<"after wait()";
         m_decoder = NULL;
         if(m_thread)
         {
@@ -157,6 +170,12 @@ void VideoItem::setMediaStatus(ZNLoadingStatus mediaStatus)
 {
     qDebug()<<"mediaStatus is read-only";
     return;
+}
+void VideoItem::myrotate()
+{
+    static int cnt = 0;
+    cnt++;
+    m_decoder->rotate(cnt*M_PI/6);
 }
 void VideoItem::onVideoInfoReady(int width, int height, int format)
 {
